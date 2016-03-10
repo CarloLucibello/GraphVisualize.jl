@@ -1,18 +1,66 @@
 module GraphVisualize
-export plot
+export plot, edgelist
 
 using GLVisualize
 using LightGraphs
 using GraphLayout
 using GeometryTypes, GLAbstraction, Reactive, GLWindow, GLFW
 
+type GraphObserver
+    glast::Graph
+    g::Graph
+end
+GraphObserver() = GraphObserver(Graph(), Graph())
+GraphObserver(g::Graph) = GraphObserver(Graph(), g)
+observe!(o::GraphObserver, g::Graph) = (o.glast = deepcopy(g); o.g = g)
+observe!(o::GraphObserver) = (o.glast = deepcopy(o.g))
+has_changed(o::GraphObserver) = !(nv(o.glast) == nv(o.g) &&  ne(o.glast) == ne(o.g))
+has_really_changed(o::GraphObserver) = !(o.glast == o.g)
+
+function edgelist(g::Graph)
+    indices = Vector{Int32}(2ne(g))
+    i = 0
+    for (u,v) in edges(g)
+        indices[i+=1] = u
+        indices[i+=1] = v
+    end
+    indices
+end
+
+function layout(g::Graph, wsize, psize)
+    x, y = layout_spring_adj(full(adjacency_matrix(g)))
+    return [Point2f0(2psize,2psize) + (Point2f0(x[i], y[i]) + Point2f0(1.,1.))* (wsize-4psize)/2 for i=1:nv(g)]
+end
 
 """
     plot(g::Graph)
 
 Creates an OpenGL window and draws `g` in it.
 """
-function plot(g::Graph)
+function plot(g::Graph; observe=false)
+    obs = GraphObserver(g)
+    sg = Signal(g)
+    if observe
+        switch = map(delta -> begin
+                # println(delta)
+                if has_changed(obs)
+                    observe!(obs)
+                    push!(sg, obs.g)
+                    return true
+                else
+                    return false
+                end
+            end, fps(10.0))
+    else
+        switch = false
+    end
+    # s = filterwhen(switch, sg, sg)
+    # plot(s)
+    plot(sg)
+    return sg, switch
+end
+
+function plot(g::Signal{Graph})
     # Credits for original code: Simon Danisch
     wsize = 900
     psize = 15f0
@@ -20,11 +68,10 @@ function plot(g::Graph)
     !isdefined(:runtests) && (window = glscreen(resolution=(wsize, wsize)))
 
     const record_interactive = true
-    x, y = layout_spring_adj(full(adjacency_matrix(g)))
-    a = [Point2f0(2psize,2psize) + (Point2f0(x[i], y[i]) + Point2f0(1.,1.))* (wsize-4psize)/2 for i=1:nv(g)]
+    vpos = const_lift(layout, g, wsize, psize)
     # println(a)
     # println(rand(Point2f0, nv(g)))
-    points = visualize((Circle(Point2f0(0), psize), a))
+    points = visualize((Circle(Point2f0(0), psize), vpos))
 
     const point_robj = points.children[] # temporary way of getting the render object. Shouldn't stay like this
      # best way to get the gpu object. One could also start by creating a gpu array oneself.
@@ -33,13 +80,8 @@ function plot(g::Graph)
     const gpu_position = point_robj[:position]
     # now the lines and points share the same gpu object
     # for linesegments, you can pass indices, which needs to be of some 32bit int type
-    indices = Vector{Int32}(2ne(g))
-    i = 0
-    for (u,v) in edges(g)
-        indices[i+=1] = u
-        indices[i+=1] = v
-    end
-    lines  = visualize(gpu_position, :linesegment, indices=indices)
+    elist = map(edgelist, g)
+    lines  = visualize(gpu_position, :linesegment, indices=elist)
 
     # current tuple of renderobject id and index into the gpu array
     const m2id = GLWindow.mouse2id(window)
@@ -75,6 +117,8 @@ function plot(g::Graph)
     view(lines, window, camera=:fixed_pixel)
     view(points, window, camera=:fixed_pixel)
     @spawn renderloop(window)
+
+    return vpos, elist
 end
 
 end # module
