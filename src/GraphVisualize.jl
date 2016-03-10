@@ -33,9 +33,10 @@ function layout(g::Graph, wsize, psize)
 end
 
 """
-    plot(g::Graph)
+    plot(g::Graph; observe=false)
 
-Creates an OpenGL window and draws `g` in it.
+Creates an OpenGL window and draws `g` in it. If `observe==true` future modifications of
+`g` will be reflected in the plot. 
 """
 function plot(g::Graph; observe=false)
     obs = GraphObserver(g)
@@ -52,7 +53,7 @@ function plot(g::Graph; observe=false)
                 end
             end, fps(10.0))
     else
-        switch = false
+        switch = Input(false)
     end
     # s = filterwhen(switch, sg, sg)
     # plot(s)
