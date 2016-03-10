@@ -1,21 +1,46 @@
+#__precompile__()
 module GraphVisualize
-export plot, edgelist
+# Credits for original code: Simon Danisch
+# Contributors: Carlo Lucibello
+
+export plot
 
 using GLVisualize
 using LightGraphs
 using GraphLayout
 using GeometryTypes, GLAbstraction, Reactive, GLWindow, GLFW
+import Base: push!
 
 type GraphObserver
     glast::Graph
     g::Graph
+    sg::Signal{Graph}
+    sw::Signal{Bool}
 end
-GraphObserver() = GraphObserver(Graph(), Graph())
-GraphObserver(g::Graph) = GraphObserver(Graph(), g)
-observe!(o::GraphObserver, g::Graph) = (o.glast = deepcopy(g); o.g = g)
-observe!(o::GraphObserver) = (o.glast = deepcopy(o.g))
-has_changed(o::GraphObserver) = !(nv(o.glast) == nv(o.g) &&  ne(o.glast) == ne(o.g))
-has_really_changed(o::GraphObserver) = !(o.glast == o.g)
+GraphObserver(g::Graph) = GraphObserver(Graph(), g, Signal(g), Signal(false))
+
+function set_observation_fps!(obs::GraphObserver, f)
+    obs.sw = map(delta -> begin
+            if has_changed(obs)
+                observe!(obs)
+                return true
+            else
+                return false
+            end
+        end, f)
+end
+
+function observe!(obs::GraphObserver, g::Graph)
+    obs.glast = deepcopy(g)
+    obs.g = g
+    push!(obs.sg, g)
+end
+observe!(obs::GraphObserver) = observe!(obs, obs.g)
+
+push!(obs::GraphObserver, g::Graph) = push!(obs.sg, g)
+
+has_changed(obs::GraphObserver) = !(nv(obs.glast) == nv(obs.g) &&  ne(obs.glast) == ne(obs.g))
+has_really_changed(obs::GraphObserver) = !(obs.glast == obs.g)
 
 function edgelist(g::Graph)
     indices = Vector{Int32}(2ne(g))
@@ -36,42 +61,24 @@ end
     plot(g::Graph; observe=false)
 
 Creates an OpenGL window and draws `g` in it. If `observe==true` future modifications of
-`g` will be reflected in the plot. 
+`g` will be reflected in the plot. Returns a `GraphObserver` of `g`.
 """
 function plot(g::Graph; observe=false)
     obs = GraphObserver(g)
-    sg = Signal(g)
-    if observe
-        switch = map(delta -> begin
-                # println(delta)
-                if has_changed(obs)
-                    observe!(obs)
-                    push!(sg, obs.g)
-                    return true
-                else
-                    return false
-                end
-            end, fps(10.0))
-    else
-        switch = Input(false)
-    end
-    # s = filterwhen(switch, sg, sg)
-    # plot(s)
-    plot(sg)
-    return sg, switch
+    observe && set_observation_fps!(obs, fps(10.0))
+    plot(obs)
+    return obs
 end
 
-function plot(g::Signal{Graph})
-    # Credits for original code: Simon Danisch
+function plot(obs::GraphObserver)
+    g = obs.sg
     wsize = 900
     psize = 15f0
 
-    !isdefined(:runtests) && (window = glscreen(resolution=(wsize, wsize)))
+    window = glscreen(resolution=(wsize, wsize))
 
     const record_interactive = true
     vpos = const_lift(layout, g, wsize, psize)
-    # println(a)
-    # println(rand(Point2f0, nv(g)))
     points = visualize((Circle(Point2f0(0), psize), vpos))
 
     const point_robj = points.children[] # temporary way of getting the render object. Shouldn't stay like this
@@ -114,12 +121,10 @@ function plot(g::Signal{Graph})
         end
         return id, index, p0
     end)
-    # view it!
+
     view(lines, window, camera=:fixed_pixel)
     view(points, window, camera=:fixed_pixel)
     @spawn renderloop(window)
-
-    return vpos, elist
 end
 
 end # module
