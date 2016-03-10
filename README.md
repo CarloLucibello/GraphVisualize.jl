@@ -32,11 +32,13 @@ rem_edge!(g, 3, 7)      # the plot is updated
 rem_vertex!(g, 3)       # the plot is updated
 add_vertex!(g)          # the plot is updated
 
-# manually close the window before next commands
+# have fun moving the vertex around
+
+# now close the window
 
 obs = plot(g, observe=false)   # a windows pops up displaying g
 add_edge!(g, 3, 7)      # the plot is NOT updated
-push!(obs, g)          # the plot is updated
+push!(obs, g)           # the plot is updated
 ...
 
 ```
