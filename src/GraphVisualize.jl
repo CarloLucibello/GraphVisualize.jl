@@ -11,18 +11,18 @@ using GraphLayout
 using GeometryTypes, GLAbstraction, Reactive, GLWindow, GLFW
 import Base: push!
 
-type GraphObserver
+type GraphPlot
     glast::Graph
     g::Graph
     sg::Signal{Graph}
     sw::Signal{Bool}
 end
-GraphObserver(g::Graph) = GraphObserver(Graph(), g, Signal(g), Signal(false))
+GraphPlot(g::Graph) = GraphPlot(Graph(), g, Signal(g), Signal(false))
 
-function set_observation_fps!(obs::GraphObserver, f)
-    obs.sw = map(delta -> begin
-            if has_changed(obs)
-                observe!(obs)
+function set_observation_fps!(plt::GraphPlot, f)
+    plt.sw = map(delta -> begin
+            if has_changed(plt)
+                observe!(plt)
                 return true
             else
                 return false
@@ -30,17 +30,17 @@ function set_observation_fps!(obs::GraphObserver, f)
         end, f)
 end
 
-function observe!(obs::GraphObserver, g::Graph)
-    obs.glast = deepcopy(g)
-    obs.g = g
-    push!(obs.sg, g)
+function observe!(plt::GraphPlot, g::Graph)
+    plt.glast = deepcopy(g)
+    plt.g = g
+    push!(plt.sg, g)
 end
-observe!(obs::GraphObserver) = observe!(obs, obs.g)
+observe!(plt::GraphPlot) = observe!(plt, plt.g)
 
-push!(obs::GraphObserver, g::Graph) = push!(obs.sg, g)
+push!(plt::GraphPlot, g::Graph) = push!(plt.sg, g)
 
-has_changed(obs::GraphObserver) = !(nv(obs.glast) == nv(obs.g) &&  ne(obs.glast) == ne(obs.g))
-has_really_changed(obs::GraphObserver) = !(obs.glast == obs.g)
+has_changed(plt::GraphPlot) = !(nv(plt.glast) == nv(plt.g) &&  ne(plt.glast) == ne(plt.g))
+has_really_changed(plt::GraphPlot) = !(plt.glast == plt.g)
 
 function edgelist(g::Graph)
     indices = Vector{Int32}(2ne(g))
@@ -61,17 +61,17 @@ end
     plot(g::Graph; observe=false)
 
 Creates an OpenGL window and draws `g` in it. If `observe==true` future modifications of
-`g` will be reflected in the plot. Returns a `GraphObserver` of `g`.
+`g` will be reflected in the plot. Returns a `GraphPlot` of `g`.
 """
 function plot(g::Graph; observe=false)
-    obs = GraphObserver(g)
-    observe && set_observation_fps!(obs, fps(10.0))
-    plot(obs)
-    return obs
+    plt = GraphPlot(g)
+    observe && set_observation_fps!(plt, fps(10.0))
+    plot(plt)
+    return plt
 end
 
-function plot(obs::GraphObserver)
-    g = obs.sg
+function plot(plt::GraphPlot)
+    g = plt.sg
     wsize = 900
     psize = 15f0
 
