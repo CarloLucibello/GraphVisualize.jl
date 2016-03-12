@@ -44,35 +44,32 @@ function update!(plt)
     @assert has_changed(g, glast)
     push!(plt.s_g, g)
 
-    # VERTEX
     if vertex_added(g, glast)
-        println("v adedd")
         push!(plt.s_vertex_pos, push!(value(plt.s_vertex_pos), new_pos(res, psize)))
     elseif vertex_removed(g, glast)
-        println("v removed")
-        push!(plt.s_vertex_pos, layout(g, res, psize))
+        # Assume that the removed vertex was exchanged with last vertex
+        # This is an hack, and will remove any of the topologically equivalent
+        # vertex of the removed one.
+        # In order to have a graphically consistent vertex removal,
+        # we need either unique vertex identifiers or some external signaling.
+        
+        lastneigs = neighbors(glast, nv(glast))
+        i = 1
+        for neigs in fadj(g)
+            neigs == lastneigs && break
+            i += 1
+        end
+        pos = value(plt.s_vertex_pos)
+        pos[i] = pos[end]
+        resize!(pos, length(pos)-1)
+        push!(plt.s_vertex_pos, pos)
     elseif nv(g) == nv(glast)
         # nothing
     else #nv(g) != nv(glast)
         push!(plt.s_vertex_pos, layout(g, res, psize))
     end
 
-    # VERTEX
-    if vertex_added(g, glast)
-        println("v adedd")
-        push!(plt.s_vertex_pos, push!(value(plt.s_vertex_pos), new_pos(res, psize)))
-    elseif vertex_removed(g, glast)
-        println("v removed")
-        push!(plt.s_vertex_pos, layout(g, res, psize))
-    elseif nv(g) == nv(glast)
-        # nothing
-    else nv(g) != nv(glast)
-        push!(plt.s_vertex_pos, layout(g, res, psize))
-    end
-
-
     plt.glast = deepcopy(g)
-    println("copied")
 end
 
 push!(plt::GraphPlot, g::Graph) = push!(plt.s_g, g)
