@@ -69,6 +69,7 @@ function update!(plt)
     end
 
     plt.glast = deepcopy(g)
+    sleep(1e-3) # BUG: removing this results in error messages
 end
 
 push!(plt::GraphPlot, g::Graph) = push!(plt.s_g, g)
