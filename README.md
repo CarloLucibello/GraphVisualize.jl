@@ -35,7 +35,7 @@ add_vertex!(g)          # the plot is updated
 # have fun moving the vertex around
 
 # now close the window
-
+g = WheelGraph(10) # create a new graph, DON'T ever plot twice the same graph   
 obs = plot(g, observe=false)   # a windows pops up displaying g
 add_edge!(g, 3, 7)      # the plot is NOT updated
 push!(obs, g)           # the plot is updated

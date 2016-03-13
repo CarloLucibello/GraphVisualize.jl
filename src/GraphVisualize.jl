@@ -48,11 +48,10 @@ function update!(plt)
         push!(plt.s_vertex_pos, push!(value(plt.s_vertex_pos), new_pos(res, psize)))
     elseif vertex_removed(g, glast)
         # Assume that the removed vertex was exchanged with last vertex
-        # This is an hack, and will remove any of the topologically equivalent
-        # vertex of the removed one.
+        # This is an hack, and it is buggy.
         # In order to have a graphically consistent vertex removal,
         # we need either unique vertex identifiers or some external signaling.
-        
+
         lastneigs = neighbors(glast, nv(glast))
         i = 1
         for neigs in fadj(g)
