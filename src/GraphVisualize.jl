@@ -11,36 +11,75 @@ using GraphLayout
 using GeometryTypes, GLAbstraction, Reactive, GLWindow, GLFW
 import Base: push!
 
-type GraphObserver
+type GraphPlot
     glast::Graph
     g::Graph
-    sg::Signal{Graph}
-    sw::Signal{Bool}
-end
-GraphObserver(g::Graph) = GraphObserver(Graph(), g, Signal(g), Signal(false))
+    resolution::Tuple{Int,Int}
+    point_size::Float32
 
-function set_observation_fps!(obs::GraphObserver, f)
-    obs.sw = map(delta -> begin
-            if has_changed(obs)
-                observe!(obs)
-                return true
-            else
-                return false
+    #SIGNALS
+    s_g::Signal{Graph}
+    s_vertex_pos::Signal
+end
+
+function GraphPlot(g::Graph; resolution = (900, 900), point_size = 15f0)
+    s_g = Signal(g)
+    s_vertex_pos = Signal(layout(g, resolution, point_size))
+    plt = GraphPlot(Graph(), g, resolution, point_size, s_g, s_vertex_pos)
+    return plt
+end
+
+function set_observation_fps!(plt::GraphPlot, f)
+    preserve(map(delta -> begin
+            if has_changed(plt.g, plt.glast)
+                update!(plt)
             end
-        end, f)
+        end, f))
 end
 
-function observe!(obs::GraphObserver, g::Graph)
-    obs.glast = deepcopy(g)
-    obs.g = g
-    push!(obs.sg, g)
+function update!(plt)
+    g = plt.g; glast = plt.glast
+    res = plt.resolution; psize = plt.point_size
+
+    @assert has_changed(g, glast)
+    push!(plt.s_g, g)
+
+    if vertex_added(g, glast)
+        push!(plt.s_vertex_pos, push!(value(plt.s_vertex_pos), new_pos(res, psize)))
+    elseif vertex_removed(g, glast)
+        # Assume that the removed vertex was exchanged with last vertex
+        # This is an hack, and it is buggy.
+        # In order to have a graphically consistent vertex removal,
+        # we need either unique vertex identifiers or some external signaling.
+
+        lastneigs = neighbors(glast, nv(glast))
+        i = 1
+        for neigs in fadj(g)
+            neigs == lastneigs && break
+            i += 1
+        end
+        pos = value(plt.s_vertex_pos)
+        pos[i] = pos[end]
+        resize!(pos, length(pos)-1)
+        push!(plt.s_vertex_pos, pos)
+    elseif nv(g) == nv(glast)
+        # nothing
+    else #nv(g) != nv(glast)
+        push!(plt.s_vertex_pos, layout(g, res, psize))
+    end
+
+    plt.glast = deepcopy(g)
 end
-observe!(obs::GraphObserver) = observe!(obs, obs.g)
 
-push!(obs::GraphObserver, g::Graph) = push!(obs.sg, g)
+push!(plt::GraphPlot, g::Graph) = push!(plt.s_g, g)
 
-has_changed(obs::GraphObserver) = !(nv(obs.glast) == nv(obs.g) &&  ne(obs.glast) == ne(obs.g))
-has_really_changed(obs::GraphObserver) = !(obs.glast == obs.g)
+edge_removed(g::Graph, glast::Graph) = ne(glast) == ne(g) + 1
+edge_added(g::Graph, glast::Graph) = ne(glast) == ne(g) - 1
+vertex_removed(g::Graph, glast::Graph) = nv(glast) == nv(g) + 1
+vertex_added(g::Graph, glast::Graph) = nv(glast) == nv(g) - 1
+
+has_changed(g::Graph, glast::Graph) = !(nv(glast) == nv(g) &&  ne(glast) == ne(g))
+has_really_changed(g::Graph, glast::Graph) = !(glast == g)
 
 function edgelist(g::Graph)
     indices = Vector{Int32}(2ne(g))
@@ -52,43 +91,43 @@ function edgelist(g::Graph)
     indices
 end
 
-function layout(g::Graph, wsize, psize)
+function new_pos(resolution, psize)
+    wsize = minimum(resolution)
+    x, y = (2rand()-1, 2rand()-1)
+    return Point2f0(2psize,2psize) + (Point2f0(x, y) + Point2f0(1.,1.))* (wsize-4psize)/2
+end
+
+
+function layout(g::Graph, resolution, psize)
+    wsize = minimum(resolution)
     x, y = layout_spring_adj(full(adjacency_matrix(g)))
     return [Point2f0(2psize,2psize) + (Point2f0(x[i], y[i]) + Point2f0(1.,1.))* (wsize-4psize)/2 for i=1:nv(g)]
 end
 
 """
-    plot(g::Graph; observe=false)
+    plot(g::Graph; observe=true, resolution = (900, 900), point_size = 15f0)
 
 Creates an OpenGL window and draws `g` in it. If `observe==true` future modifications of
-`g` will be reflected in the plot. Returns a `GraphObserver` of `g`.
+`g` will be reflected in the plot. Returns a `GraphPlot` object.
 """
-function plot(g::Graph; observe=false)
-    obs = GraphObserver(g)
-    observe && set_observation_fps!(obs, fps(10.0))
-    plot(obs)
-    return obs
+function plot(g::Graph; observe= true, kw...)
+    plt = GraphPlot(g, kw...)
+    observe && set_observation_fps!(plt, fps(10.))  # WEIRDNESS: if I inserte this line in the GraphPlot constructor
+                                                    #           it doesn't update
+    plot(plt)
+    return plt
 end
 
-function plot(obs::GraphObserver)
-    g = obs.sg
-    wsize = 900
-    psize = 15f0
+function plot(plt::GraphPlot)
 
-    window = glscreen(resolution=(wsize, wsize))
+    window = glscreen(resolution=plt.resolution)
 
     const record_interactive = true
-    vpos = const_lift(layout, g, wsize, psize)
-    points = visualize((Circle(Point2f0(0), psize), vpos))
+    points = visualize((Circle(Point2f0(0), plt.point_size), plt.s_vertex_pos))
 
-    const point_robj = points.children[] # temporary way of getting the render object. Shouldn't stay like this
-     # best way to get the gpu object. One could also start by creating a gpu array oneself.
-     # this is a bit tricky, since not there are three different types.
-     # for points and lines you need a GLBuffer. e.g gpu_position = GLBuffer(rand(Point2f0, 50)*1000f0)
+    const point_robj = points.children[]
     const gpu_position = point_robj[:position]
-    # now the lines and points share the same gpu object
-    # for linesegments, you can pass indices, which needs to be of some 32bit int type
-    elist = map(edgelist, g)
+    elist = map(edgelist, plt.s_g)
     lines  = visualize(gpu_position, :linesegment, indices=elist)
 
     # current tuple of renderobject id and index into the gpu array
