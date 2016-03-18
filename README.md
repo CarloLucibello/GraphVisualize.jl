@@ -16,7 +16,9 @@ For the time being only the function
 ```julia
     plot(g::Graph; observe=false)
 ```
-returning an observer of graph `g`, is exported.
+returning an plot object of graph `g` and visualizing it in an OpenGL window.
+
+Is `observe=true` updates to `g` will be reflected in updates to the plot.
 
 You can left-click and drag a vertex to move it around.
 
@@ -24,8 +26,8 @@ You can left-click and drag a vertex to move it around.
 using LightGraphs
 using GraphVisualize
 
-g = WheelGraph(10)
-obs = plot(g, observe=true)   # a windows pops up displaying g
+g = erdos_renyi(10, 20)
+plt = plot(g, observe=true)   # a windows pops up displaying g
 
 add_edge!(g, 3, 7)      # the plot is updated
 rem_edge!(g, 3, 7)      # the plot is updated
@@ -36,7 +38,7 @@ add_vertex!(g)          # the plot is updated
 
 # now close the window
 g = WheelGraph(10) # create a new graph, DON'T ever plot twice the same graph   
-obs = plot(g, observe=false)   # a windows pops up displaying g
+plt = plot(g, observe=false)   # a windows pops up displaying g
 add_edge!(g, 3, 7)      # the plot is NOT updated
 push!(obs, g)           # the plot is updated
 ...
