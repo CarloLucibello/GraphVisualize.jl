@@ -53,11 +53,16 @@ function update!(plt)
         # we need either unique vertex identifiers or some external signaling.
 
         lastneigs = neighbors(glast, nv(glast))
+        ilast = 0
         i = 1
         for neigs in fadj(g)
-            neigs == lastneigs && break
+            if neigs == lastneigs
+                neigs != neighbors(glast,i) && break
+                ilast = i
+            end
             i += 1
         end
+        i > nv(g) && (i = ilast)
         pos = value(plt.s_vertex_pos)
         pos[i] = pos[end]
         resize!(pos, length(pos)-1)
